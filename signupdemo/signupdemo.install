@@ -1,0 +1,91 @@
+<?php
+/**
+ * @file
+ *   Define schema.
+ */
+
+/**
+ * Implements hook_schema().
+ */
+function signupdemo_schema() {
+  $schema['signupdemo'] = array(
+    'description' => 'to hold time, date, user ID and node ID',
+    'fields' => array(
+      'id' => array(
+        'description' => 'entry ID',
+        'type' => 'serial',
+        'unsigned' => TRUE,
+        'not null' => TRUE,
+      ),
+      'uid' => array(
+        'description' => 'this {users}.uid subscribed',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'nid' => array(
+        'description' => 'this {node}.nid has the subscription',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+      'mail' => array(
+        'description' => 'user\'s email',
+        'type' => 'varchar',
+        'length' => 64,
+        'not null' => FALSE,
+        'default' => '',
+      ),
+      'created' => array(
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+        'description' => 'time of the subscription',
+      ),
+    ),
+    'primary key' => array('id'),
+    'indexes' => array(
+      'node' => array('nid'),
+      'node_user' => array('nid', 'uid'),
+    ),
+  );
+  $schema['signupdemo_enabled'] = array(
+    'description' => 'so we know if there are signups on this node',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'this {node}.nid has signups enabled',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+  return $schema;
+}
+
+/**
+ * Implements hook_uninstall().
+ */
+function signupdemo_uninstall() {
+  variable_del('signupdemo_types');
+}
+
+/**
+ * Implements hook_update_N().
+ */
+function signupdemo_update_7001() {
+  $signupdemo_enabled_table = array(
+    'description' => 'are there signups on this node?',
+    'fields' => array(
+      'nid' => array(
+        'description' => 'this {node}.nid has signups enabled.',
+        'type' => 'int',
+        'not null' => TRUE,
+        'default' => 0,
+      ),
+    ),
+    'primary key' => array('nid'),
+  );
+  db_create_table('signupdemo_enabled', $signupdemo_enabled_table);
+}

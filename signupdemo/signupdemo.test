@@ -1,0 +1,50 @@
+<?php
+/**
+  * @file
+  *   automated testing for this module
+  */
+
+class signupdemoTestCase extends DrupalWebTestCase {
+
+  public static function getInfo() {
+    return array(
+      'name' => 'signupdemo functionality',
+      'description' => 'test signupdemo functions',
+      'group' => 'signupdemo',
+    );
+  }
+
+  /**
+   * activate modules and add users
+   */
+  function setUp() {
+    parent::setUp('signupdemo');
+    // Create users.
+    $this->admin_user = $this->drupalCreateUser(array(
+      'administer signupdemo settings',
+      'create page content',
+    ));
+  }
+
+  /**
+   * testing settings functions
+   */
+  function testsignupdemoSettings() {
+    // Log in an admin user.
+    $this->drupalLogin($this->admin_user);
+
+    // see that settings dont appear on new page
+    $this->drupalGet('node/add/page');
+    $this->assertNoText(t('Collect e-mail addresses for this node.'), 'signupdemo settings not found.');
+
+    // enable signupdemo
+    $edit = array('signupdemo_types[page]' => TRUE);
+
+    // $edit = array();
+    $this->drupalPost('admin/config/content/signupdemo', $edit, t('Save configuration'));
+
+    // do settings appear when making new page
+    $this->drupalGet('node/add/page');
+    $this->assertText(t('Collect e-mail addresses for this node.'), 'signupdemo settings not found');
+  }
+}

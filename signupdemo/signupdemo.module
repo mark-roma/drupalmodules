@@ -1,0 +1,296 @@
+<?php
+/**
+ * Implements hook_menu().
+ */
+function signupdemo_menu() {
+  $items = array();
+  $items['node/%/subscribe'] = array(
+    'title' => 'Sign Up!',
+    'description' => 'signup for node updates',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('signupdemo_email_form', 1),
+    'access callback' => 'signupdemo_access_subscribe_tab',
+    'access arguments' => array('create signupdemo subscriptions', 1),
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/config/content/signupdemo'] = array(
+    'title' => 'Signup Settings',
+    'description' => 'Administer Node Signup Settings.',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('signupdemo_admin_settings_form'),
+    'access arguments' => array('administer signupdemo settings'),
+    'file' => 'signupdemo.admin.inc',
+  );
+  $items['admin/reports/signupdemo'] = array(
+    'title' => 'Node Signups',
+    'description' => 'View Node Signups',
+    'page callback' => 'signupdemo_signups',
+    'access arguments' => array('view signupdemo subscriptions'),
+    'file' => 'signupdemo.admin.inc',
+  );
+  return $items;
+}
+
+/**
+ * Provide the form to add an email address.
+ */
+function signupdemo_email_form($form, $form_state, $nid = 0) {
+  global $user;
+  $form['email'] = array(
+    '#title' => t('email address'),
+    '#type' => 'textfield',
+    '#size' => 20,
+    '#description' => t('signup for node updates'),
+    '#required' => TRUE,
+    '#default_value' => isset($user->mail) ? $user->mail : '',
+  );
+
+  $form['submit'] = array(
+    '#type' => 'submit',
+    '#value' => t('Sign Up'),
+  );
+  $form['nid'] = array(
+    '#type' => 'hidden',
+    '#value' => $nid,
+  );
+  return $form;
+}
+
+/**
+ * validation
+ */
+function signupdemo_email_form_validate($form, &$form_state) {
+
+  $email = $form_state['values']['email'];
+  if (!valid_email_address($email)) {
+    $message = t('this %email is not a valid email address. Please
+re-enter your address.', array('%email' => $email));
+    form_set_error('email', $message);
+  }
+
+  $nid = $form_state['values']['nid'];
+  if (!signupdemo_get_node_enabled($nid)) {
+    form_set_error('', t('you cannot subscribe for updates on this node'));
+  }
+
+  // stop duplicates
+  $previous_signup = db_query("SELECT mail FROM {signupdemo} WHERE nid = :nid AND
+mail = :mail", array('nid' => $nid, 'mail' => $email))->fetchField();
+  if ($previous_signup) {
+    form_set_error('email', t('this %email has already signed up on this node', array('%email' => $email)));
+  }
+}
+
+/**
+ * submissions
+ */
+function signupdemo_email_form_submit($form, &$form_state) {
+  $nid = isset($form_state['values']['nid']) ? $form_state['values']['nid'] : 0;
+  if ($nid && is_numeric($nid)) {
+    signupdemo_signup($form_state['values']['email'], $nid);
+
+    // confirmation message
+    drupal_set_message(t('Thanks for signing up for updates on this node. You
+have been added as %email.', array('%email' => $form_state['values']['email'])));
+  }
+}
+
+/**
+ * keep emails
+ */
+function signupdemo_signup($email, $nid) {
+  global $user;
+
+  $value = array(
+    'nid' => $nid,
+    'uid' => $user->uid,
+    'mail' => $email,
+    'created' => time(),
+  );
+
+  drupal_write_record('signupdemo', $value);
+}
+
+/**
+ * Implements hook_permission().
+ */
+function signupdemo_permission() {
+  $perm = array(
+    'view signupdemo subscriptions' => array(
+      'title' => t('View signupdemo subscriptions'),
+    ),
+    'create signupdemo subscriptions' => array(
+      'title' => t('Create signupdemo subscriptions'),
+    ),
+    'administer signupdemo settings' => array(
+      'title' => t('Administer signupdemo settings'),
+    )
+  );
+  return $perm;
+}
+
+/**
+ * Implements hook_block_info().
+ */
+function signupdemo_block_info() {
+  $blocks = array();
+  $blocks['signupdemo_subscribe'] = array(
+    'info' => t('Node Signup Form'),
+  );
+  return $blocks;
+}
+
+/*
+ * Implements hook_block_view().
+ */
+function signupdemo_block_view($delta) {
+  $block = array();
+  switch ($delta) {
+  case 'signupdemo_subscribe':
+    if (arg(0) == 'node' && is_numeric(arg(1)) && signupdemo_get_node_enabled(arg(1))) {
+      $nid = arg(1);
+      $form = drupal_get_form('signupdemo_email_form', $nid);
+      $block = array(
+        'subject' => "Signupdemo Subscription",
+        'content' => theme('signupdemo_block', array('form' => drupal_render($form))),
+      );
+    }
+    break;
+  }
+  return $block;
+}
+
+/**
+ * Implementation of hook_theme().
+ */
+function signupdemo_theme() {
+  $theme = array();
+  $theme['signupdemo_block'] = array(
+    'variables' => array(
+      'form' => '',
+    ),
+    'template' => 'signupdemo-block',
+  );
+  return $theme;
+}
+
+/**
+ * Implements hook_form_BASE_FORM_ID_alter().
+ *
+ */
+function signupdemo_form_node_form_alter(&$form, $form_state) {
+  $node = $form['#node'];
+  $types = variable_get('signupdemo_types', array());
+  if (!empty($types[$node->type]) && user_access('administer signupdemo settings')) {
+    $form['signupdemo'] = array(
+      '#title' => t('signupdemo'),
+      '#type' => 'fieldset',
+      '#collapsible' => TRUE,
+      '#collapsed' => FALSE,
+      '#group' => 'additional_settings',
+    );
+    $form['signupdemo']['signupdemo_enabled'] = array(
+      '#title' => t('save e-mail addresses for this node'),
+      '#type' => 'checkbox',
+      '#default_value' => isset($node->signupdemo_enabled) ?
+$node->signupdemo_enabled : FALSE,
+    );
+  }
+}
+
+/**
+ *
+ * @param int $nid
+ *   The node id of the node in question.
+ *
+ * @return boolean
+ */
+function signupdemo_get_node_enabled($nid) {
+  if (is_numeric($nid)) {
+    $result = db_query("SELECT nid FROM {signupdemo_enabled} WHERE nid = :nid",
+array('nid' => $nid))->fetchField();
+    if ($result) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+/**
+ *
+ * @param int $nid
+ *
+ */
+function signupdemo_set_node_enabled($nid) {
+  if (is_numeric($nid) &! signupdemo_get_node_enabled($nid)) {
+      db_insert('signupdemo_enabled')
+        ->fields(array('nid' => $nid))
+        ->execute();
+  }
+}
+
+/**
+ *
+ * @param int $nid
+ *
+ */
+function signupdemo_delete_node_enabled($nid) {
+  if (is_numeric($nid)) {
+    db_delete('signupdemo_enabled')
+      ->condition('nid', $nid)
+      ->execute();
+  }
+}
+
+/**
+ * Implements hook_node_load().
+ */
+function signupdemo_node_load($nodes, $types) {
+  foreach ($nodes as $nid => $node) {
+    $node->signupdemo_enabled = signupdemo_get_node_enabled($node->nid);
+  }
+}
+
+/**
+ * Implements hook_node_insert().
+ */
+function signupdemo_node_insert($node) {
+  if ($node->signupdemo_enabled) {
+    signupdemo_set_node_enabled($node->nid);
+  }
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function signupdemo_node_update($node) {
+  signupdemo_delete_node_enabled($node->nid);
+  if ($node->signupdemo_enabled) {
+    signupdemo_set_node_enabled($node->nid);
+  }
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function signupdemo_node_delete($node) {
+  signupdemo_delete_node_enabled($node->nid);
+}
+
+/**
+ * Implements hook_node_view().
+ */
+function signupdemo_node_view($node, $view_mode, $langcode) {
+  if (!empty($node->signupdemo_enabled) && user_access('create signupdemo
+subscription')) {
+    $node->content['signupdemo'] = drupal_get_form('signupdemo_email_form', $node->nid);
+    $node->content['signupdemo']['#weight'] = 100;
+  }
+}
+
+/*
+ * tab callback
+ */
+function signupdemo_access_subscribe_tab($permission, $nid) {
+    return signupdemo_get_node_enabled($nid) && user_access($permission);
+}

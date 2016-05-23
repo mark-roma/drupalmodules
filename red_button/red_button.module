@@ -1,0 +1,14 @@
+<?php
+
+/**
+ * Implementation of hook_node_view ()
+ */
+function red_button_node_view ($node, $view_mode) {
+  $link_text = t ('Delete this node! Q\'plah!');
+  $link_options = array (
+    'attributes' => array ('style' => 'color:#ff0000;display:inline-block; float:left; width:150px; height:50px; background-color:#DB6E6F;border: dashed 1px #ff0000; padding: 10px;'),
+  );
+  $link_markup = l($link_text, "node/$node->nid/delete", $link_options);
+  $node->content ['red_button'] = array ();
+  $node->content ['red_button'] ['#markup'] = $link_markup;
+}

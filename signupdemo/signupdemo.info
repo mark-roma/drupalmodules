@@ -1,0 +1,8 @@
+name = signupdemo
+description = this module allows users to sign up for nodes
+core = 7.x
+package = RomaModules
+version = 0.1-dev
+dependencies[] = block
+configure = admin/config/content/signupdemo
+files[] = signupdemo.test

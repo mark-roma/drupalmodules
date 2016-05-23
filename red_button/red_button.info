@@ -1,0 +1,4 @@
+name =  Red Button Delete
+description = Adds a delete link to every node
+core = 7.x
+package = RomaModules
